@@ -6,21 +6,36 @@ export function calculateMetrics(track: TrackData): ActivityMetrics {
   let elevationGainMeters = 0;
   let elevationLossMeters = 0;
   let hasElevationPair = false;
+  const elevationProfile: NonNullable<ActivityMetrics["elevationProfile"]> = [];
   const allPoints = track.segments.flatMap((segment) => segment.points);
 
   for (const segment of track.segments) {
-    for (let index = 1; index < segment.points.length; index += 1) {
-      const previous = segment.points[index - 1];
-      const current = segment.points[index];
-      totalDistanceMeters += haversineDistance(previous, current);
+    const segmentStartDistance = totalDistanceMeters;
+    let segmentDistanceMeters = 0;
+    let profileRun: Array<{ distanceMeters: number; elevationMeters: number }> = [];
+    for (let index = 0; index < segment.points.length; index += 1) {
+      const point = segment.points[index];
+      if (index > 0) {
+        const previous = segment.points[index - 1];
+        const distance = haversineDistance(previous, point);
+        totalDistanceMeters += distance;
+        segmentDistanceMeters += distance;
 
-      if (previous.elevation !== undefined && current.elevation !== undefined) {
-        hasElevationPair = true;
-        const change = current.elevation - previous.elevation;
-        if (change > 0) elevationGainMeters += change;
-        if (change < 0) elevationLossMeters -= change;
+        if (previous.elevation !== undefined && point.elevation !== undefined) {
+          hasElevationPair = true;
+          const change = point.elevation - previous.elevation;
+          if (change > 0) elevationGainMeters += change;
+          if (change < 0) elevationLossMeters -= change;
+        }
       }
+      if (point.elevation === undefined) {
+        if (profileRun.length >= 2) elevationProfile.push({ points: profileRun });
+        profileRun = [];
+        continue;
+      }
+      profileRun.push({ distanceMeters: segmentStartDistance + segmentDistanceMeters, elevationMeters: point.elevation });
     }
+    if (profileRun.length >= 2) elevationProfile.push({ points: profileRun });
   }
 
   const timestamps = allPoints.map((point) => point.timestamp);
@@ -38,6 +53,6 @@ export function calculateMetrics(track: TrackData): ActivityMetrics {
       durationSeconds,
       averageSpeedMps: totalDistanceMeters / durationSeconds,
     } : {}),
-    ...(hasElevationPair ? { elevationGainMeters, elevationLossMeters } : {}),
+    ...(hasElevationPair ? { elevationGainMeters, elevationLossMeters, elevationProfile } : {}),
   };
 }

@@ -18,6 +18,9 @@ export type ActivityMetrics = {
   averageSpeedMps?: number;
   elevationGainMeters?: number;
   elevationLossMeters?: number;
+  elevationProfile?: Array<{
+    points: Array<{ distanceMeters: number; elevationMeters: number }>;
+  }>;
 };
 
 export type ParsedActivity = {

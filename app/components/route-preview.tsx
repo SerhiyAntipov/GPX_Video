@@ -7,6 +7,7 @@ import type { ActivityMetrics, TrackData } from "@/lib/gpx/types";
 import { DEFAULT_VIDEO_SETTINGS, normalizeVideoSettings, type VideoSettings } from "@/lib/video/settings";
 import { RouteMap, type RouteMapController } from "./route-map";
 import { VideoSettingsPanel } from "./video-settings";
+import { ElevationProfile } from "./elevation-profile";
 
 function formatDistance(meters: number) {
   if (meters < 1000) return `${Math.round(meters)} м`;
@@ -128,11 +129,15 @@ export function RoutePreview({ track, metrics }: { track: TrackData; metrics: Ac
   }
 
   function seekPlayback(value: string) {
-    const nextProgress = Number(value) / 1000;
-    playerRef.current?.seek(nextProgress);
-    currentProgressRef.current = nextProgress;
-    mapControllerRef.current?.setProgress(nextProgress);
-    setProgress(nextProgress);
+    seekToProgress(Number(value) / 1000);
+  }
+
+  function seekToProgress(nextProgress: number) {
+    const normalizedProgress = Math.max(0, Math.min(1, nextProgress));
+    playerRef.current?.seek(normalizedProgress);
+    currentProgressRef.current = normalizedProgress;
+    mapControllerRef.current?.setProgress(normalizedProgress);
+    setProgress(normalizedProgress);
     lastUiUpdateRef.current = performance.now();
   }
 
@@ -182,6 +187,14 @@ export function RoutePreview({ track, metrics }: { track: TrackData; metrics: Ac
         {settings.visibleMetrics.elevationGain && metrics.elevationGainMeters !== undefined && <MetricCard label="НАБІР ВИСОТИ" value={`${Math.round(metrics.elevationGainMeters)}`} unit="м" />}
         {settings.visibleMetrics.elevationLoss && metrics.elevationLossMeters !== undefined && <MetricCard label="СПУСК" value={`${Math.round(metrics.elevationLossMeters)}`} unit="м" />}
       </div>
+      {metrics.elevationProfile && (
+        <ElevationProfile
+          profile={metrics.elevationProfile}
+          totalDistanceMeters={metrics.totalDistanceMeters}
+          progress={progress}
+          onSeek={seekToProgress}
+        />
+      )}
       <p className="metric-note">
         {timeline.durationSeconds === undefined
           ? "Час активності недоступний: у GPX немає повних послідовних часових міток."

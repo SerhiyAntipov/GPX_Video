@@ -62,6 +62,18 @@ describe("calculateMetrics", () => {
     expect(metrics.averageSpeedMps).toBeCloseTo(metrics.totalDistanceMeters / 240, 8);
     expect(metrics.elevationGainMeters).toBe(20);
     expect(metrics.elevationLossMeters).toBe(5);
+    expect(metrics.elevationProfile).toEqual([
+      { points: [
+        { distanceMeters: 0, elevationMeters: 100 },
+        { distanceMeters: expect.any(Number), elevationMeters: 110 },
+      ] },
+      { points: [
+        { distanceMeters: expect.any(Number), elevationMeters: 105 },
+        { distanceMeters: expect.any(Number), elevationMeters: 115 },
+        { distanceMeters: expect.any(Number), elevationMeters: 110 },
+      ] },
+    ]);
+    expect(metrics.elevationProfile?.[1].points[0].distanceMeters).toBe(metrics.elevationProfile?.[0].points[1].distanceMeters);
   });
 
   it("leaves duration and speed unavailable if timestamps are incomplete or inconsistent", () => {
@@ -90,5 +102,6 @@ describe("calculateMetrics", () => {
     const metrics = calculateMetrics(track);
     expect(metrics.elevationGainMeters).toBeUndefined();
     expect(metrics.elevationLossMeters).toBeUndefined();
+    expect(metrics.elevationProfile).toBeUndefined();
   });
 });
