@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { createRouteTimeline, getRoutePosition } from "@/lib/animation/route-timeline";
 import { RoutePlayerClock } from "@/lib/animation/route-player-clock";
 import type { ActivityMetrics, TrackData } from "@/lib/gpx/types";
+import { DEFAULT_VIDEO_SETTINGS, normalizeVideoSettings, type VideoSettings } from "@/lib/video/settings";
 import { RouteMap, type RouteMapController } from "./route-map";
+import { VideoSettingsPanel } from "./video-settings";
 
 function formatDistance(meters: number) {
   if (meters < 1000) return `${Math.round(meters)} м`;
@@ -42,9 +44,16 @@ function RestartIcon() {
   return <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M4.1 7.2A6.6 6.6 0 1 1 3.5 11M4 3.8v3.8h3.8M10 6.2v4l2.8 1.7" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-function formatPreviewTime(progress: number) {
-  const totalSeconds = Math.round(progress * 20);
-  return `00:${String(totalSeconds).padStart(2, "0")}`;
+const SETTINGS_STORAGE_KEY = "gpx-video.preview-settings.v1";
+
+function readStoredSettings(): VideoSettings {
+  if (typeof window === "undefined") return DEFAULT_VIDEO_SETTINGS;
+  try {
+    const stored = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    return stored ? normalizeVideoSettings(JSON.parse(stored)) : DEFAULT_VIDEO_SETTINGS;
+  } catch {
+    return DEFAULT_VIDEO_SETTINGS;
+  }
 }
 
 export function RoutePreview({ track, metrics }: { track: TrackData; metrics: ActivityMetrics }) {
@@ -55,6 +64,20 @@ export function RoutePreview({ track, metrics }: { track: TrackData; metrics: Ac
   const lastUiUpdateRef = useRef(0);
   const [progress, setProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [settings, setSettings] = useState<VideoSettings>(readStoredSettings);
+
+  function changeSettings(nextSettings: VideoSettings) {
+    if (nextSettings.durationSeconds !== settings.durationSeconds) {
+      playerRef.current?.pause();
+      setIsPlaying(false);
+    }
+    setSettings(nextSettings);
+    try {
+      window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
+    } catch {
+      // Settings are still applied in this browser session.
+    }
+  }
 
   const updateProgress = useCallback((nextProgress: number) => {
     currentProgressRef.current = nextProgress;
@@ -72,14 +95,18 @@ export function RoutePreview({ track, metrics }: { track: TrackData; metrics: Ac
   }, []);
 
   useEffect(() => {
-    const player = new RoutePlayerClock(updateProgress, () => setIsPlaying(false));
+    const player = new RoutePlayerClock(updateProgress, () => setIsPlaying(false), settings.durationSeconds * 1000);
+    player.seek(currentProgressRef.current);
     playerRef.current = player;
     return () => {
       player.destroy();
       if (playerRef.current === player) playerRef.current = null;
-      mapControllerRef.current = null;
     };
-  }, [updateProgress]);
+  }, [settings.durationSeconds, updateProgress]);
+
+  useEffect(() => () => {
+    mapControllerRef.current = null;
+  }, []);
 
   const currentPosition = getRoutePosition(timeline, progress);
   function togglePlayback() {
@@ -114,11 +141,13 @@ export function RoutePreview({ track, metrics }: { track: TrackData; metrics: Ac
       <div className="route-result-heading">
         <div>
           <span className="result-eyebrow">GPX · ФАЙЛ ОБРОБЛЕНО ЛОКАЛЬНО</span>
-          <h3>{track.name || track.sourceFileName}</h3>
+          <h3>{settings.title.trim() || track.name || track.sourceFileName}</h3>
         </div>
         <span className="segment-count">{track.segments.length} {track.segments.length === 1 ? "сегмент" : "сегменти"}</span>
       </div>
-      <RouteMap timeline={timeline} onReady={handleMapReady} />
+      <div className="preview-and-settings">
+        <div className="preview-column">
+          <RouteMap timeline={timeline} aspectRatio={settings.aspectRatio} onReady={handleMapReady} />
       <div className="playback-panel" aria-label="Керування анімацією маршруту">
         <button className="playback-main-button" type="button" onClick={togglePlayback} aria-label={isPlaying ? "Пауза" : "Відтворити маршрут"} title={isPlaying ? "Пауза" : "Відтворити маршрут"}>
           {isPlaying ? <PauseIcon /> : <PlayIcon />}
@@ -129,7 +158,7 @@ export function RoutePreview({ track, metrics }: { track: TrackData; metrics: Ac
         <div className="timeline-control">
           <div className="timeline-meta">
             <span>ПОПЕРЕДНІЙ ПЕРЕГЛЯД</span>
-            <span>{formatPreviewTime(progress)} <i>/</i> 00:20</span>
+            <span>{formatDuration(progress * settings.durationSeconds)} <i>/</i> {formatDuration(settings.durationSeconds)}</span>
           </div>
           <input
             type="range"
@@ -143,12 +172,15 @@ export function RoutePreview({ track, metrics }: { track: TrackData; metrics: Ac
           />
         </div>
       </div>
+        </div>
+        <VideoSettingsPanel settings={settings} metrics={metrics} onChange={changeSettings} />
+      </div>
       <div className="metrics-grid">
-        <MetricCard label="ПРОЙДЕНО" value={formatDistance(currentPosition?.distanceMeters ?? 0)} unit={`з ${formatDistance(metrics.totalDistanceMeters)}`} />
-        <MetricCard label="ЧАС АКТИВНОСТІ" value={formatDuration(currentPosition?.elapsedSeconds)} unit={metrics.durationSeconds !== undefined ? `/ ${formatDuration(metrics.durationSeconds)}` : undefined} />
-        <MetricCard label="СЕР. ШВИДКІСТЬ" value={metrics.averageSpeedMps !== undefined ? (metrics.averageSpeedMps * 3.6).toFixed(1) : "—"} unit={metrics.averageSpeedMps !== undefined ? "км/год" : undefined} />
-        <MetricCard label="НАБІР ВИСОТИ" value={metrics.elevationGainMeters !== undefined ? `${Math.round(metrics.elevationGainMeters)}` : "—"} unit={metrics.elevationGainMeters !== undefined ? "м" : undefined} />
-        <MetricCard label="СПУСК" value={metrics.elevationLossMeters !== undefined ? `${Math.round(metrics.elevationLossMeters)}` : "—"} unit={metrics.elevationLossMeters !== undefined ? "м" : undefined} />
+        {settings.visibleMetrics.distance && <MetricCard label="ПРОЙДЕНО" value={formatDistance(currentPosition?.distanceMeters ?? 0)} unit={`з ${formatDistance(metrics.totalDistanceMeters)}`} />}
+        {settings.visibleMetrics.duration && metrics.durationSeconds !== undefined && <MetricCard label="ЧАС АКТИВНОСТІ" value={formatDuration(currentPosition?.elapsedSeconds)} unit={`/ ${formatDuration(metrics.durationSeconds)}`} />}
+        {settings.visibleMetrics.speed && metrics.averageSpeedMps !== undefined && <MetricCard label="СЕР. ШВИДКІСТЬ" value={(metrics.averageSpeedMps * 3.6).toFixed(1)} unit="км/год" />}
+        {settings.visibleMetrics.elevationGain && metrics.elevationGainMeters !== undefined && <MetricCard label="НАБІР ВИСОТИ" value={`${Math.round(metrics.elevationGainMeters)}`} unit="м" />}
+        {settings.visibleMetrics.elevationLoss && metrics.elevationLossMeters !== undefined && <MetricCard label="СПУСК" value={`${Math.round(metrics.elevationLossMeters)}`} unit="м" />}
       </div>
       <p className="metric-note">
         {timeline.durationSeconds === undefined

@@ -8,10 +8,12 @@ import {
   getRoutePointGeoJSON,
   type RouteTimeline,
 } from "@/lib/animation/route-timeline";
+import type { VideoAspectRatio } from "@/lib/video/settings";
 
 export type RouteMapController = { setProgress: (progress: number) => void };
 type RouteMapProps = {
   timeline: RouteTimeline;
+  aspectRatio: VideoAspectRatio;
   onReady: (controller: RouteMapController | null) => void;
 };
 type MapTheme = "dark" | "light";
@@ -60,7 +62,7 @@ function makeDarkStyleFallback(id: string) {
   return undefined;
 }
 
-function addRouteLayers(map: MapLibreMap, timeline: RouteTimeline, progress: number) {
+function addRouteLayers(map: MapLibreMap, timeline: RouteTimeline, progress: number, theme: MapTheme) {
   // style.load guarantees the style is ready for sources/layers, even when its tiles
   // are still loading. isStyleLoaded() is intentionally not checked here because
   // it can stay false during that interval and would skip the route permanently.
@@ -75,9 +77,9 @@ function addRouteLayers(map: MapLibreMap, timeline: RouteTimeline, progress: num
     type: "line",
     source: "activity-route-base",
     paint: {
-      "line-color": "#d7ded8",
-      "line-width": 3,
-      "line-opacity": 0.34,
+      "line-color": theme === "light" ? "#174b45" : "#c8d7ce",
+      "line-width": 3.5,
+      "line-opacity": theme === "light" ? 0.9 : 0.78,
     },
     layout: { "line-cap": "round", "line-join": "round" },
   });
@@ -140,10 +142,11 @@ function addRouteLayers(map: MapLibreMap, timeline: RouteTimeline, progress: num
   });
 }
 
-function RouteMapView({ timeline, onReady }: RouteMapProps) {
+function RouteMapView({ timeline, aspectRatio, onReady }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const initialThemeRef = useRef<MapTheme>("dark");
+  const activeThemeRef = useRef<MapTheme>("dark");
   const progressRef = useRef(0);
   const [showMap, setShowMap] = useState(false);
   const [theme, setTheme] = useState<MapTheme>("dark");
@@ -192,7 +195,7 @@ function RouteMapView({ timeline, onReady }: RouteMapProps) {
 
       map.on("style.load", () => {
         if (!map) return;
-        addRouteLayers(map, timeline, progressRef.current);
+        addRouteLayers(map, timeline, progressRef.current, activeThemeRef.current);
         applyProgress(progressRef.current);
         onReady({ setProgress: applyProgress });
         setIsLoading(false);
@@ -249,13 +252,18 @@ function RouteMapView({ timeline, onReady }: RouteMapProps) {
     map.setStyle(styles[theme], { diff: false });
   }, [showMap, theme]);
 
+  useEffect(() => {
+    mapRef.current?.resize();
+  }, [aspectRatio]);
+
   function selectTheme(nextTheme: MapTheme) {
     initialThemeRef.current = nextTheme;
+    activeThemeRef.current = nextTheme;
     setTheme(nextTheme);
   }
 
   return (
-    <div className="route-map-frame">
+    <div className={`route-map-frame route-aspect-${aspectRatio.replace(":", "-")}`}>
       {showMap ? (
         <>
           <div className="route-map-canvas" ref={containerRef} aria-label="Карта з маршрутом" />

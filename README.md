@@ -4,7 +4,7 @@ GPX Video is a browser based studio for turning GPS activities into route videos
 
 ## Current status
 
-The first browser workflow is in place: choose or drop a GPX file, parse its track locally, view it on an online OpenStreetMap-based map, and see metrics supported by the source data. The route preview includes play, pause, restart, and seek controls; its 20-second preview clock animates the route and synchronizes distance and available source activity time. Satellite imagery and video export are not implemented yet.
+The first browser workflow is in place: choose or drop a GPX file, parse its track locally, view it on an online OpenStreetMap-based map, and see metrics supported by the source data. The route preview includes play, pause, restart, and seek controls; its configurable 10, 20, or 30-second preview clock animates the route and synchronizes distance and available source activity time. The title, frame aspect ratio, preview duration, and visible metric cards are stored locally in the browser. GPX files and route coordinates are not persisted. Satellite imagery and video export are not implemented yet.
 
 Distance uses great-circle distance between adjacent points within each segment. Duration and average speed are shown only if every track point has a valid, strictly increasing timestamp. Elevation gain/loss sums raw differences between adjacent points that both have elevation; no smoothing is applied. Animation follows cumulative distance, keeps GPX segments separate, and jumps the marker at segment boundaries without drawing a connector. Missing timestamps never produce a fabricated activity time.
 
