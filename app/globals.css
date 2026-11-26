@@ -79,6 +79,20 @@ h1 span { color: var(--accent); }
 .map-consent-panel p { width: min(100%, 390px); margin: 7px 0 12px; color: #a2aaa5; font-size: 9px; line-height: 1.5; }
 .map-consent-button { padding: 8px 12px; border: 1px solid #f0eee9; border-radius: 5px; background: #f0eee9; color: #171a18; font-size: 10px; font-weight: 700; cursor: pointer; }
 .map-consent-button:hover { background: #fff; }
+.playback-panel { display: flex; align-items: center; gap: 7px; margin-top: 9px; padding: 9px 10px; border: 1px solid #292f37; border-radius: 7px; background: rgba(255,255,255,.018); }
+.playback-main-button, .playback-restart-button { flex: 0 0 auto; display: grid; place-items: center; border: 1px solid #383f48; border-radius: 6px; color: #e9e7e1; background: #20252c; cursor: pointer; }
+.playback-main-button { width: 34px; height: 34px; border-color: #ff7547; color: #171310; background: #ff7547; }
+.playback-main-button:hover { background: #ff8b63; }
+.playback-restart-button { width: 32px; height: 32px; }
+.playback-restart-button:hover { color: #fff; background: #303640; }
+.playback-main-button svg, .playback-restart-button svg { width: 17px; height: 17px; }
+.timeline-control { flex: 1; min-width: 0; padding-left: 5px; }
+.timeline-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; color: #929aa2; font-size: 8px; font-weight: 700; letter-spacing: .8px; }
+.timeline-meta span:last-child { color: #e4e1dc; font-size: 9px; letter-spacing: .3px; white-space: nowrap; }
+.timeline-meta i { padding: 0 3px; color: #757d86; font-style: normal; }
+.timeline-control input[type="range"] { display: block; width: 100%; height: 4px; margin: 0; border-radius: 99px; outline: none; appearance: none; background: linear-gradient(90deg, #ff7547 var(--timeline-progress), #3a4149 var(--timeline-progress)); cursor: pointer; }
+.timeline-control input[type="range"]::-webkit-slider-thumb { width: 11px; height: 11px; border: 2px solid #fff2eb; border-radius: 50%; appearance: none; background: #ff7547; box-shadow: 0 0 0 2px #ff754733; }
+.timeline-control input[type="range"]::-moz-range-thumb { width: 8px; height: 8px; border: 2px solid #fff2eb; border-radius: 50%; background: #ff7547; box-shadow: 0 0 0 2px #ff754733; }
 .metrics-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-top: 11px; }
 .metric-card { min-height: 67px; display: flex; flex-direction: column; justify-content: center; gap: 7px; padding: 9px 8px; border: 1px solid #292f37; border-radius: 7px; background: rgba(255,255,255,.018); }
 .metric-label { color: #838b95; font-size: 7px; font-weight: 700; letter-spacing: .7px; white-space: nowrap; }

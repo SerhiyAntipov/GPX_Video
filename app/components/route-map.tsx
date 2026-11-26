@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { Map as MapLibreMap } from "maplibre-gl";
-import type { TrackData } from "@/lib/gpx/types";
+import { memo, useEffect, useRef, useState } from "react";
+import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
+import {
+  getFullRouteGeoJSON,
+  getProgressRouteGeoJSON,
+  getRoutePointGeoJSON,
+  type RouteTimeline,
+} from "@/lib/animation/route-timeline";
 
-type RouteMapProps = { track: TrackData };
+export type RouteMapController = { setProgress: (progress: number) => void };
+type RouteMapProps = {
+  timeline: RouteTimeline;
+  onReady: (controller: RouteMapController | null) => void;
+};
 type MapTheme = "dark" | "light";
 
 const styles: Record<MapTheme, string> = {
@@ -51,40 +60,46 @@ function makeDarkStyleFallback(id: string) {
   return undefined;
 }
 
-function addRouteLayers(map: MapLibreMap, track: TrackData) {
+function addRouteLayers(map: MapLibreMap, timeline: RouteTimeline, progress: number) {
   // style.load guarantees the style is ready for sources/layers, even when its tiles
   // are still loading. isStyleLoaded() is intentionally not checked here because
   // it can stay false during that interval and would skip the route permanently.
-  if (map.getSource("activity-route")) return;
+  if (map.getSource("activity-route-base")) return;
 
-  const segments = track.segments.filter((segment) => segment.points.length >= 2);
-  const routeFeatures = segments.map((segment) => ({
-    type: "Feature" as const,
-    properties: {},
-    geometry: {
-      type: "LineString" as const,
-      coordinates: segment.points.map((point) => [point.longitude, point.latitude]),
-    },
-  }));
-
-  map.addSource("activity-route", {
+  map.addSource("activity-route-base", {
     type: "geojson",
-    data: { type: "FeatureCollection", features: routeFeatures },
+    data: getFullRouteGeoJSON(timeline),
   });
   map.addLayer({
-    id: "activity-route-line",
+    id: "activity-route-base-line",
     type: "line",
-    source: "activity-route",
+    source: "activity-route-base",
+    paint: {
+      "line-color": "#d7ded8",
+      "line-width": 3,
+      "line-opacity": 0.34,
+    },
+    layout: { "line-cap": "round", "line-join": "round" },
+  });
+
+  map.addSource("activity-route-progress", {
+    type: "geojson",
+    data: getProgressRouteGeoJSON(timeline, progress),
+  });
+  map.addLayer({
+    id: "activity-route-progress-line",
+    type: "line",
+    source: "activity-route-progress",
     paint: {
       "line-color": "#ff7547",
-      "line-width": 4,
+      "line-width": 4.5,
       "line-opacity": 0.95,
       "line-blur": 0.25,
     },
     layout: { "line-cap": "round", "line-join": "round" },
   });
 
-  const routePoints = track.segments.flatMap((segment) => segment.points);
+  const routePoints = timeline.segments.flatMap((segment) => segment.points);
   const first = routePoints[0];
   const last = routePoints[routePoints.length - 1];
   const markerFeatures = [
@@ -106,12 +121,30 @@ function addRouteLayers(map: MapLibreMap, track: TrackData) {
       "circle-stroke-width": 2,
     },
   });
+
+  map.addSource("activity-current-position", {
+    type: "geojson",
+    data: getRoutePointGeoJSON(timeline, progress),
+  });
+  map.addLayer({
+    id: "activity-current-position-layer",
+    type: "circle",
+    source: "activity-current-position",
+    paint: {
+      "circle-radius": 8,
+      "circle-color": "#ff7547",
+      "circle-stroke-color": "#fff4ed",
+      "circle-stroke-width": 2.5,
+      "circle-blur": 0.08,
+    },
+  });
 }
 
-export function RouteMap({ track }: RouteMapProps) {
+function RouteMapView({ timeline, onReady }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const initialThemeRef = useRef<MapTheme>("dark");
+  const progressRef = useRef(0);
   const [showMap, setShowMap] = useState(false);
   const [theme, setTheme] = useState<MapTheme>("dark");
   const [isLoading, setIsLoading] = useState(false);
@@ -142,6 +175,14 @@ export function RouteMap({ track }: RouteMapProps) {
         },
       });
       mapRef.current = map;
+      const applyProgress = (progress: number) => {
+        const normalizedProgress = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
+        progressRef.current = normalizedProgress;
+        const routeSource = map?.getSource("activity-route-progress") as GeoJSONSource | undefined;
+        const positionSource = map?.getSource("activity-current-position") as GeoJSONSource | undefined;
+        routeSource?.setData(getProgressRouteGeoJSON(timeline, normalizedProgress));
+        positionSource?.setData(getRoutePointGeoJSON(timeline, normalizedProgress));
+      };
       map.setMissingStyleImageResolver((id) => {
         if (map?.hasImage(id)) return;
         const fallback = makeDarkStyleFallback(id);
@@ -151,14 +192,16 @@ export function RouteMap({ track }: RouteMapProps) {
 
       map.on("style.load", () => {
         if (!map) return;
-        addRouteLayers(map, track);
+        addRouteLayers(map, timeline, progressRef.current);
+        applyProgress(progressRef.current);
+        onReady({ setProgress: applyProgress });
         setIsLoading(false);
       });
 
       map.on("load", () => {
         if (!map) return;
-        addRouteLayers(map, track);
-        const routePoints = track.segments.flatMap((segment) => segment.points);
+        applyProgress(progressRef.current);
+        const routePoints = timeline.segments.flatMap((segment) => segment.points);
         let minLongitude = Number.POSITIVE_INFINITY;
         let maxLongitude = Number.NEGATIVE_INFINITY;
         let minLatitude = Number.POSITIVE_INFINITY;
@@ -194,8 +237,9 @@ export function RouteMap({ track }: RouteMapProps) {
       disposed = true;
       map?.remove();
       mapRef.current = null;
+      onReady(null);
     };
-  }, [showMap, track]);
+  }, [showMap, timeline, onReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -234,3 +278,5 @@ export function RouteMap({ track }: RouteMapProps) {
     </div>
   );
 }
+
+export const RouteMap = memo(RouteMapView);
